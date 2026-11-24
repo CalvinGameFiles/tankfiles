@@ -28,7 +28,12 @@ const Game = (() => {
   const lb = { open: false, k: 0 };                      // multiplayer LEADERBOARD: open or not, and how far it has slid out (0-1)
   let customLevel = null, customDone = null, editHover = null, inset = { l: 0, t: 0, r: 0, b: 0 };   // level creator: the level being edited / tested
   const keys = {}, mouse = { x: 0, y: 0, inside: false };
-  const sticks = { move: null, aim: null };    // {id, ox, oy, x, y, dx, dy, len}
+  const sticks = { move: null, aim: null };    // move: a thumb stick {id, ox, oy, x, y, dx, dy, len}; aim: the finger the turret follows {id, ox, oy, x, y, t0, moved}
+  // PHONE CAMERA: on a touch screen the map is zoomed in and follows your tank. zoom 0 = the whole map, 1 = big, 2 = huge
+  const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  let zoom = (() => { const z = +localStorage.getItem('tankfiles.zoom'); return z >= 0 && z <= 2 && localStorage.getItem('tankfiles.zoom') !== null ? z : 1; })();
+  const ZOOM_ROWS = [0, 6.5, 5];               // how many squares tall the screen shows at each zoom
+  const ZOOM_NAME = ['ALL', 'BIG', 'HUGE'];
   let onPause = () => {}, onLeave = () => {};
 
   // ---------- rooms ----------
@@ -596,7 +601,7 @@ const Game = (() => {
     const ox = t.x, oy = t.y;
     driveTank(t, moveInput(), dt);
     t.vx = (t.x - ox) / dt; t.vy = (t.y - oy) / dt;
-    if (sticks.aim && sticks.aim.len > 12) t.turret = Math.atan2(sticks.aim.dy, sticks.aim.dx);
+    if (sticks.aim) t.turret = fingerAim(t);
     else if (!touchMode) t.turret = Math.atan2(mouse.y - t.y, mouse.x - t.x);
   }
   // Where would a shell fired by t at angle a end up? Walks the shell's path with the real bounce rule and reports the
@@ -1022,9 +1027,46 @@ const Game = (() => {
     dpr = Math.min(2, window.devicePixelRatio || 1);
     view.cw = window.innerWidth; view.ch = window.innerHeight;
     canvas.width = Math.round(view.cw * dpr); canvas.height = Math.round(view.ch * dpr);
+    applyCam(0);
+  }
+  const touchDev = () => touchMode || coarse;
+  // the camera is on for your own tank on a phone: the campaign, a level-creator test and Local games (not split screen, the level creator or teleport placing)
+  function camOn() { return touchDev() && zoom > 0 && state !== 'edit' && state !== 'idle' && state !== 'place' && !(vs && vs.role === 'local'); }
+  function camTarget() { if (vs) { const P = vs.players.find(q => q.ctl === 'me'); return P ? P.tank : null; } return player; }
+  function applyCam(dt) {
     const aw = Math.max(50, view.cw - inset.l - inset.r), ah = Math.max(50, view.ch - inset.t - inset.b);   // the level creator's panels take some of the screen
-    view.scale = Math.min(aw / W, ah / H);
-    view.ox = inset.l + (aw - W * view.scale) / 2; view.oy = inset.t + (ah - H * view.scale) / 2;
+    const fit = Math.min(aw / W, ah / H);
+    let s = fit, ox, oy;
+    if (camOn()) s = Math.max(fit, ah / ZOOM_ROWS[zoom] / TILE);
+    const vw = W * s, vh = H * s, t = camTarget();
+    ox = inset.l + (aw - vw) / 2; oy = inset.t + (ah - vh) / 2;
+    if (t && vw > aw) ox = Math.max(inset.l + aw - vw, Math.min(inset.l, inset.l + aw / 2 - t.x * s));
+    if (t && vh > ah) oy = Math.max(inset.t + ah - vh, Math.min(inset.t, inset.t + ah / 2 - t.y * s));
+    if (!dt || Math.abs(s - view.scale) > 1e-6) { view.scale = s; view.ox = ox; view.oy = oy; return; }
+    const k = Math.min(1, dt * 7);                                          // glide after the tank (a teleport swoops across)
+    view.ox += (ox - view.ox) * k; view.oy += (oy - view.oy) * k;
+  }
+  function cycleZoom() {
+    zoom = (zoom + 1) % 3; localStorage.setItem('tankfiles.zoom', zoom); Sfx.click && Sfx.click(); applyCam(0);
+  }
+  // the turret follows the finger: the world point under it, every frame (so it keeps pointing there while you drive)
+  function fingerAim(t) { const s = sticks.aim; if (!s) return null; const w = toWorld(s.x, s.y); return Math.atan2(w.y - t.y, w.x - t.x); }
+  const isTap = s => s.moved < 24 && performance.now() - s.t0 < 350;
+  function drawFinger(s) {
+    ctx.strokeStyle = 'rgba(255,230,140,0.9)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(s.x, s.y, 16, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s.x - 26, s.y); ctx.lineTo(s.x - 10, s.y); ctx.moveTo(s.x + 10, s.y); ctx.lineTo(s.x + 26, s.y);
+    ctx.moveTo(s.x, s.y - 26); ctx.lineTo(s.x, s.y - 10); ctx.moveTo(s.x, s.y + 10); ctx.lineTo(s.x, s.y + 26); ctx.stroke();
+  }
+  function drawZoomBtn(r) {
+    if (!touchDev() || (vs && vs.role === 'local')) return;
+    roundBtn(r, 'rgba(20,40,70,0.85)');
+    const cx = r.x + r.w * 0.42, cy = r.y + r.h * 0.4, rad = r.w * 0.17;
+    ctx.strokeStyle = '#fff3cf'; ctx.lineWidth = Math.max(2, r.w * 0.06); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + rad * 0.75, cy + rad * 0.75); ctx.lineTo(cx + rad * 1.6, cy + rad * 1.6); ctx.stroke(); ctx.lineCap = 'butt';
+    ctx.fillStyle = '#f0c25c'; ctx.font = font(r.w * 0.26); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(ZOOM_NAME[zoom], r.x + r.w / 2, r.y + r.h - 2);
   }
   const toWorld = (sx, sy) => ({ x: (sx - view.ox) / view.scale, y: (sy - view.oy) / view.scale });
 
@@ -1803,6 +1845,7 @@ const Game = (() => {
     const s = Math.min(view.cw, view.ch);
     return {
       pause: { x: view.cw - 16 - s * 0.085, y: 14, w: s * 0.085, h: s * 0.085 },
+      zoom: { x: view.cw - 28 - s * 0.17, y: 14, w: s * 0.085, h: s * 0.085 },
       mine: { x: view.cw - 28 - s * 0.14, y: view.ch - 28 - s * 0.14, w: s * 0.14, h: s * 0.14 },
     };
   }
@@ -1813,11 +1856,13 @@ const Game = (() => {
     const R = hudRects(), k = Math.min(1.4, view.scale + 0.3);
     ctx.font = font(16 * k); ctx.textBaseline = 'top'; ctx.textAlign = 'left';
     const label = `${level.name}   ENEMIES ${enemiesLeft()}`;
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(view.ox + 8, view.oy + 8, ctx.measureText(label).width + 16, 30);
-    ctx.fillStyle = '#fff3cf'; ctx.fillText(label, view.ox + 16, view.oy + 14);
+    const hx = Math.max(0, view.ox), hy = Math.max(0, view.oy), hb = Math.min(view.ch, view.oy + H * view.scale);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(hx + 8, hy + 8, ctx.measureText(label).width + 16, 30);
+    ctx.fillStyle = '#fff3cf'; ctx.fillText(label, hx + 16, hy + 14);
     const ammo = `SHELLS ${MAX_SHELLS - player.shells}/${MAX_SHELLS}   MINES ${MAX_MINES - player.mines}/${MAX_MINES}   LIVES ${save.lives}`;
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(view.ox + 8, view.oy + H * view.scale - 38, ctx.measureText(ammo).width + 16, 30);
-    ctx.fillStyle = '#fff3cf'; ctx.fillText(ammo, view.ox + 16, view.oy + H * view.scale - 32);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(hx + 8, hb - 38, ctx.measureText(ammo).width + 16, 30);
+    ctx.fillStyle = '#fff3cf'; ctx.fillText(ammo, hx + 16, hb - 32);
+    drawZoomBtn(R.zoom);
     roundBtn(R.pause, 'rgba(20,40,70,0.85)');
     ctx.fillStyle = '#fff3cf';
     ctx.fillRect(R.pause.x + R.pause.w * 0.3, R.pause.y + R.pause.h * 0.25, R.pause.w * 0.14, R.pause.h * 0.5);
@@ -1828,8 +1873,9 @@ const Game = (() => {
       ctx.fillText('MINE', R.mine.x + R.mine.w / 2, R.mine.y + R.mine.h / 2);
       for (const kk of ['move', 'aim']) {
         const s = sticks[kk]; if (!s) continue;
+        if (kk === 'aim') { drawFinger(s); continue; }
         ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.ox, s.oy, 60, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = kk === 'move' ? 'rgba(61,139,255,0.7)' : 'rgba(240,194,92,0.7)'; ctx.beginPath(); ctx.arc(s.x, s.y, 28, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(61,139,255,0.7)'; ctx.beginPath(); ctx.arc(s.x, s.y, 28, 0, Math.PI * 2); ctx.fill();
       }
     }
     if (!touchMode && state === 'playing' && mouse.inside) {
@@ -1890,13 +1936,13 @@ const Game = (() => {
     Sfx.unlock();
     const p = { x: e.clientX, y: e.clientY }, R = hudRects();
     if (inRect(p, R.pause) && (state === 'playing' || state === 'dead' || state === 'intro')) { pause(); return; }
+    if (e.pointerType === 'touch') touchMode = true;
+    if (touchDev() && inRect(p, R.zoom)) { cycleZoom(); return; }
     if (e.pointerType === 'touch') {
       touchMode = true;
       if (state !== 'playing') { advance(); return; }
       if (inRect(p, R.mine)) { layMine(player); return; }
-      const side = p.x < view.cw / 2 ? 'move' : 'aim';
-      if (!sticks[side]) sticks[side] = { id: e.pointerId, ox: p.x, oy: p.y, x: p.x, y: p.y, dx: 0, dy: 0, len: 0 };
-      canvas.setPointerCapture(e.pointerId);
+      startTouch(e, p);
       return;
     }
     touchMode = false;
@@ -1905,11 +1951,21 @@ const Game = (() => {
     if (e.button === 2) layMine(player);
     else if (e.button === 0) { player.turret = Math.atan2(mouse.y - player.y, mouse.x - player.x); fire(player); }
   }
+  // a new finger: the drive stick if it lands on the left 40% while you are not driving yet, otherwise the aim finger
+  function startTouch(e, p) {
+    const now = performance.now();
+    if (!sticks.move && p.x < view.cw * 0.4) sticks.move = { id: e.pointerId, ox: p.x, oy: p.y, x: p.x, y: p.y, dx: 0, dy: 0, len: 0, t0: now, moved: 0 };
+    else if (!sticks.aim) sticks.aim = { id: e.pointerId, ox: p.x, oy: p.y, x: p.x, y: p.y, t0: now, moved: 0 };
+    else return;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  }
   function onMove(e) {
     if (e.pointerType === 'touch') {
       for (const s of ss) if (s && s.id === e.pointerId) dragStick(s, e);
       for (const k of ['move', 'aim']) {
         const s = sticks[k]; if (!s || s.id !== e.pointerId) continue;
+        s.moved = Math.max(s.moved || 0, Math.hypot(e.clientX - s.ox, e.clientY - s.oy));
+        if (k === 'aim') { s.x = e.clientX; s.y = e.clientY; continue; }
         let dx = e.clientX - s.ox, dy = e.clientY - s.oy; const len = Math.hypot(dx, dy);
         if (len > 60) { dx *= 60 / len; dy *= 60 / len; }
         s.x = s.ox + dx; s.y = s.oy + dy; s.dx = dx / 60; s.dy = dy / 60; s.len = Math.min(len, 60);
@@ -1923,9 +1979,10 @@ const Game = (() => {
     for (let k = 0; k < 2; k++) if (ss[k] && ss[k].id === e.pointerId) ss[k] = null;
     for (const k of ['move', 'aim']) {
       const s = sticks[k]; if (!s || s.id !== e.pointerId) continue;
-      if (k === 'aim' && s.len > 12 && state === 'playing') {
-        if (vs) { const P = vs.players.find(q => q.ctl === 'me'); if (P) { snapAim(P.tank, 0, Math.atan2(s.dy, s.dx)); act(P, 'fire'); } }
-        else { player.turret = Math.atan2(s.dy, s.dx); fire(player); }
+      // a quick TAP (on either side) turns the turret to that spot and fires; a drag only aims (or drives)
+      if (isTap(s) && state === 'playing') {
+        if (vs) { const P = vs.players.find(q => q.ctl === 'me'); if (P) { const w = toWorld(s.ox, s.oy); snapAim(P.tank, 0, Math.atan2(w.y - P.tank.y, w.x - P.tank.x)); act(P, 'fire'); } }
+        else { const w = toWorld(s.ox, s.oy); player.turret = Math.atan2(w.y - player.y, w.x - player.x); fire(player); }
       }
       sticks[k] = null;
     }
@@ -2026,7 +2083,7 @@ const Game = (() => {
     const t = P.tank;
     if (P.ctl === 'me') {
       let aim = null;
-      if (sticks.aim && sticks.aim.len > 12) aim = Math.atan2(sticks.aim.dy, sticks.aim.dx);
+      if (sticks.aim) aim = fingerAim(t);
       else if (!touchMode) aim = Math.atan2(mouse.y - t.y, mouse.x - t.x);
       return { mv: moveInput(), aim, rate: turnRate(t) };
     }
@@ -2326,7 +2383,7 @@ const Game = (() => {
     s.x = s.ox + dx; s.y = s.oy + dy; s.dx = dx / 60; s.dy = dy / 60; s.len = Math.min(len, 60);
   }
   function vsRects() {
-    const s = Math.min(view.cw, view.ch), R = { pause: { x: view.cw - 16 - s * 0.085, y: 14, w: s * 0.085, h: s * 0.085 } };
+    const s = Math.min(view.cw, view.ch), R = { pause: { x: view.cw - 16 - s * 0.085, y: 14, w: s * 0.085, h: s * 0.085 }, zoom: { x: view.cw - 28 - s * 0.17, y: 14, w: s * 0.085, h: s * 0.085 } };
     if (vs.role === 'local') {
       // each player's buttons in a column down their edge: TELEPORT, FIRE (weapon 1), FIRE 2 (weapon 2), MINE
       const b = s * 0.17, g = 8, tall = b * 0.7 + b + b * 0.85 + b * 0.7 + g * 3, y0 = Math.max(s * 0.24, view.ch - 14 - tall);
@@ -2358,6 +2415,7 @@ const Game = (() => {
     if (inRect(p, R.lbTab)) { lb.open = !lb.open; Sfx.click && Sfx.click(); return; }
     if (lb.k > 0.05 && inRect(p, R.lbPanel)) return;                         // taps on the open board do nothing else
     if (inRect(p, R.pause)) { pause(); return; }
+    if (vs.role !== 'local' && touchDev() && inRect(p, R.zoom)) { cycleZoom(); return; }
     if (state === 'place') { padTap(p.x, p.y); return; }                    // placing teleport squares before the round
     if (vs.role === 'local') {
       if (e.pointerType === 'mouse') return;                                  // split screen on a PC: keyboard only
@@ -2377,9 +2435,7 @@ const Game = (() => {
       if (inRect(p, R.fire2)) { act(P, 'fire2'); return; }
       if (P.tank.pw.mines && inRect(p, R.mine)) { act(P, 'mine'); return; }
       if (P.tank.pw.teleport && inRect(p, R.tele)) { act(P, 'tele'); return; }
-      const side = p.x < view.cw / 2 ? 'move' : 'aim';
-      if (!sticks[side]) sticks[side] = { id: e.pointerId, ox: p.x, oy: p.y, x: p.x, y: p.y, dx: 0, dy: 0, len: 0 };
-      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      startTouch(e, p);
       return;
     }
     touchMode = false;
@@ -2514,7 +2570,7 @@ const Game = (() => {
       ctx.fillStyle = vs.timeLeft > 0 && vs.timeLeft <= 10 && Math.floor(clock * 4) % 2 ? '#ff6a6a' : '#fff3cf';
       ctx.fillText(txt, cx, cy + 13 * k);
     }
-    roundBtn(R.pause, 'rgba(20,40,70,0.85)');
+    drawZoomBtn(R.zoom); roundBtn(R.pause, 'rgba(20,40,70,0.85)');
     ctx.fillStyle = '#fff3cf';
     ctx.fillRect(R.pause.x + R.pause.w * 0.3, R.pause.y + R.pause.h * 0.25, R.pause.w * 0.14, R.pause.h * 0.5);
     ctx.fillRect(R.pause.x + R.pause.w * 0.56, R.pause.y + R.pause.h * 0.25, R.pause.w * 0.14, R.pause.h * 0.5);
@@ -2553,12 +2609,13 @@ const Game = (() => {
         if (t.pw.teleport) { roundBtn(R.tele, 'rgba(150,70,230,0.85)', true); label(R.tele, 'TELE', '#fff'); }
         for (const kk of ['move', 'aim']) {
           const s = sticks[kk]; if (!s) continue;
+          if (kk === 'aim') { drawFinger(s); continue; }
           ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.ox, s.oy, 60, 0, Math.PI * 2); ctx.stroke();
-          ctx.fillStyle = kk === 'move' ? 'rgba(61,139,255,0.7)' : 'rgba(240,194,92,0.7)'; ctx.beginPath(); ctx.arc(s.x, s.y, 28, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(61,139,255,0.7)'; ctx.beginPath(); ctx.arc(s.x, s.y, 28, 0, Math.PI * 2); ctx.fill();
         }
-        // the aim stick fires weapon 1 when you let go: say which
+        // a tap fires weapon 1: say which
         ctx.font = font(12 * k); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(255,243,207,0.85)';
-        ctx.fillText(`AIM + LET GO: ${wName(t, 0)} ${ammoText(t, 0)}`, R.mine.x - 12, R.fire2.y + R.fire2.h / 2);
+        ctx.fillText(`TAP: ${wName(t, 0)} ${ammoText(t, 0)}`, R.mine.x - 12, R.fire2.y + R.fire2.h / 2);
       }
       if (P && !touchMode && state === 'playing') {                         // PC: what each mouse button fires
         const t = P.tank, txt = `LEFT CLICK / F: ${wName(t, 0)} ${ammoText(t, 0)}     RIGHT CLICK / Q: ${wName(t, 1)} ${ammoText(t, 1)}`;
@@ -2616,6 +2673,7 @@ const Game = (() => {
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
     if (state !== 'idle' && state !== 'paused' && state !== 'dead-paused' && state !== 'edit') update(dt);
+    if (state !== 'idle') applyCam(dt);
     // music: plays through the mission card and the fight, holds while paused, stops (and rewinds) on death, a cleared mission, or the menus
     Music.want(state === 'intro' || state === 'playing' || state === 'place' ? (level.floor || 'indoor') : state === 'paused' ? 'pause' : null);
     draw();
@@ -2644,7 +2702,7 @@ const Game = (() => {
       get map() { return map; }, get barrels() { return barrels; }, get level() { return level; }, get stateT() { return stateT; },
       screenOf: (x, y) => ({ x: view.ox + x * view.scale, y: view.oy + y * view.scale }), spill, slow: slowAt, explode, seedMines, simWave, hitTank, freezeAt, homingAim, teleport, get pads() { return pads; }, get ices() { return ices; }, get clock() { return clock; },
       fire: t => fire(t || player), mine: () => layMine(player), visible: tankVisible, onLava, simShot, chooseShot, los, bfs, kill: t => killTank(t || player), tick: dt => update(dt), skipIntro: () => { if (state === 'intro') { state = 'playing'; stateT = 0; } },
-      key: (code, down) => { keys[code] = down; }, aim: a => { player.turret = a; touchMode = true; }, get consts() { return { TILE, COLS, ROWS, W, H }; },
+      key: (code, down) => { keys[code] = down; }, aim: a => { player.turret = a; touchMode = true; }, get sticks() { return sticks; }, get consts() { return { TILE, COLS, ROWS, W, H }; },
     },
   };
 })();

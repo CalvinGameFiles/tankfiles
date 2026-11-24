@@ -546,7 +546,9 @@ try:
     touch("touchEnd", [])
     touch("touchStart", [(600, 200)]); touch("touchMove", [(650, 150)]); cdp.pump(0.1); touch("touchEnd", [])
     cdp.pump(0.05)
-    check("right thumb aims and fires on release", E(f"{D}.shells.length") == 1)
+    check("dragging a finger only aims", E(f"{D}.shells.length") == 0)
+    touch("touchStart", [(600, 200)]); cdp.pump(0.05); touch("touchEnd", []); cdp.pump(0.05)
+    check("a tap fires", E(f"{D}.shells.length") == 1)
     shot(cdp, "09-touch")
     # every mission: no tank may start inside a wall square
     bad = E("""(() => { const out = []; LEVELS.forEach((L, i) => { const g = L.grid; const cols = g ? g[0].length : L.cols; const rows = g ? g.length : L.rows;

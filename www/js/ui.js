@@ -189,6 +189,15 @@ const UI = (() => {
     const back = ['levelsBack', 'slotsBack', 'optBack', 'mpBack', 'lanBack', 'ssBack', 'ppBack'].map(id => $(id)).find(b => b && b.closest('.screen.active'));
     if (back && !$('confirm').classList.contains('active')) back.click();
   };
+  // phones on the website: the first touch goes full screen and holds the phone sideways (the app is already like that)
+  function goFull() {
+    if (window.AndroidApp || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+    if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return;
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}))
+      .catch(() => {});
+  }
+  document.addEventListener('pointerup', goFull, true);
   document.addEventListener('DOMContentLoaded', init);
   return { page, openSlots, confirm, toast, get deleting() { return deleting; }, get slotMode() { return slotMode; } };
 })();
