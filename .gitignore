@@ -1,0 +1,7 @@
+debug/shots/
+debug/__pycache__/
+scripts/__pycache__/
+debug/_*.py
+debug/_*.txt
+scripts/_*.py
+node_modules/

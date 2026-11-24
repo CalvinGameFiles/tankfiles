@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b1a2c">
+<title>TankFiles</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- TITLE -->
+<div id="title" class="screen active">
+  <div class="menu-bg"></div>
+  <div class="title-wrap">
+    <img src="img/title-tank.png" class="title-tank" alt="">
+    <h1 class="title">TANK<span>FILES</span></h1>
+  </div>
+  <div class="menu-buttons">
+    <button class="mbtn" data-go="slots-load">PLAY</button>
+    <button class="mbtn" data-go="multi" id="multiBtn">MULTIPLAYER</button>
+    <button class="mbtn" data-go="levels" id="levelSelectBtn">LEVEL SELECT</button>
+    <button class="mbtn" data-go="editor" id="editorBtn">LEVEL CREATOR</button>
+    <button class="mbtn" data-go="options">OPTIONS</button>
+  </div>
+  <div class="ver">v0.1 &middot; CalvinGameFiles</div>
+</div>
+
+<!-- SAVE SLOTS (used for both "pick a file" and "save to a file") -->
+<div id="slots" class="screen">
+  <div class="menu-bg"></div>
+  <h2 id="slotsTitle">SELECT FILE</h2>
+  <div class="slot-list" id="slotList"></div>
+  <div class="slot-foot">
+    <button class="sbtn gray" id="slotsBack">&#9664; BACK</button>
+    <button class="mbtn red del" id="deleteBtn">DELETE SAVE</button>
+  </div>
+</div>
+
+<!-- LEVEL SELECT: one button per mission in levels.js; locked until every mission has been cleared (see UI.LEVEL_SELECT_LOCKED) -->
+<div id="levels" class="screen">
+  <div class="menu-bg"></div>
+  <h2>LEVEL SELECT</h2>
+  <div class="level-grid" id="levelGrid"></div>
+  <div class="slot-foot">
+    <button class="sbtn gray" id="levelsBack">&#9664; BACK</button>
+  </div>
+</div>
+
+<!-- OPTIONS (from the title or from the pause menu) -->
+<div id="options" class="screen">
+  <div class="menu-bg"></div>
+  <h2>OPTIONS</h2>
+  <div class="opt-list">
+    <div class="opt colors"><span>Tank colour</span><div class="swatches" id="optColors"></div></div>
+    <label class="opt"><span>Sound effects</span><input type="range" id="optSfx" min="0" max="1" step="0.05"><b id="optSfxV"></b></label>
+    <label class="opt"><span>Music</span><input type="range" id="optMusic" min="0" max="1" step="0.05"><b id="optMusicV"></b></label>
+    <label class="opt"><span>Screen shake</span><input type="checkbox" id="optShake"></label>
+    <label class="opt"><span>Aim line</span><input type="checkbox" id="optAim"></label>
+    <div class="opt help">
+      <b>PC:</b> WASD / arrows drive &middot; mouse aims &middot; click fires &middot; space or right-click lays a mine &middot; Esc pauses<br>
+      <b>Touch:</b> left thumb drives &middot; right thumb aims, let go to fire &middot; MINE button &middot; &#10074;&#10074; pauses<br>
+      <b>Local multiplayer:</b> same controls &middot; E / Shift (or the TELE button) teleports from a purple square
+    </div>
+  </div>
+  <div class="menu-buttons row">
+    <button class="sbtn gray" id="optReset">RESET</button>
+    <button class="mbtn" id="optBack">BACK</button>
+  </div>
+</div>
+
+<!-- LEVEL CREATOR: the game draws the level in the middle; these panels sit round it -->
+<div id="editor" class="screen editor">
+  <div class="ed-top" id="edTop">
+    <button class="sbtn gray" id="edBack">&#9664; BACK</button>
+    <input id="edName" class="ed-name" maxlength="24" spellcheck="false">
+    <button class="sbtn" id="edLocal">LOCAL MAP</button>
+    <span class="ed-size">SIZE
+      <button class="sbtn tiny" data-size="c-">&minus;</button><b id="edCols">24</b><button class="sbtn tiny" data-size="c+">+</button>
+      &times;
+      <button class="sbtn tiny" data-size="r-">&minus;</button><b id="edRows">16</b><button class="sbtn tiny" data-size="r+">+</button>
+    </span>
+    <button class="sbtn" id="edNew">NEW</button>
+    <button class="sbtn" id="edLoad">LOAD</button>
+    <button class="sbtn" id="edSave">SAVE</button>
+    <button class="mbtn ed-test" id="edTest">&#9654; TEST</button>
+  </div>
+  <div class="ed-side" id="edSide">
+    <div class="ed-tabs" id="edTabs"><button data-tab="blocks">BLOCKS</button><button data-tab="tanks">TANKS</button><button data-tab="style">STYLE</button></div>
+    <div class="ed-pane" id="edBlocks"></div>
+    <div class="ed-pane hidden" id="edTanks"></div>
+    <div class="ed-pane hidden" id="edStyle"></div>
+    <div class="ed-hint" id="edHint"></div>
+  </div>
+  <div class="ed-pop hidden" id="edLoadBox">
+    <h3>SAVED LEVELS</h3>
+    <div class="ed-llist" id="edLoadList"></div>
+    <button class="sbtn gray" id="edLoadClose">CLOSE</button>
+  </div>
+  <div class="ed-pop hidden" id="palBox">
+    <h3>PICK A COLOUR</h3>
+    <div class="pal-grid" id="palGrid"></div>
+    <div class="pal-foot"><label>ANY COLOUR <input type="color" id="palAny"></label><button class="sbtn" id="palDefault">DEFAULT</button><button class="sbtn gray" id="palClose">CLOSE</button></div>
+  </div>
+</div>
+
+<!-- TANK CREATOR: paint the parts, pick the powers -->
+<div id="tankmaker" class="screen tm">
+  <div class="menu-bg"></div>
+  <h2>CREATE TANK</h2>
+  <div class="tm-wrap">
+    <div class="tm-col">
+      <canvas id="tmCanvas" width="720" height="560"></canvas>
+      <canvas id="tmPick" class="hidden"></canvas>
+      <div class="tm-tip">Pick a colour, then tap a part of the tank (or a part's name) to paint it.</div>
+      <div class="tm-parts" id="tmParts"></div>
+      <div class="tm-palrow"><span>COLOUR <i id="tmCur"></i></span><label>ANY COLOUR <input type="color" id="tmAny"></label><button class="sbtn gray" id="tmReset">BLACK &amp; WHITE</button></div>
+      <div class="pal-grid" id="tmPalette"></div>
+    </div>
+    <div class="tm-col">
+      <label class="opt"><span>Name</span><input id="tmName" class="ed-name" maxlength="18" spellcheck="false"></label>
+      <label class="opt" id="tmSpeedRow"><span>Speed (100% = yours)</span><input type="range" id="tmSpeed" min="1" max="120"><b id="tmSpeedV"></b></label>
+      <label class="opt"><span>HP</span><input type="range" id="tmHp" min="1" max="10"><b id="tmHpV"></b></label>
+      <div class="opt tm-sub" id="tmDropOpts"><span>Dropper</span>
+        <div class="tm-liq" id="tmDropLiq"><button data-liq="oil">OIL</button><button data-liq="water">WATER</button><button data-liq="lava">LAVA</button><button data-liq="acid">ACID</button><button data-liq="tar">TAR</button></div>
+        <input type="range" id="tmDropSize" min="1" max="5"><b id="tmDropSizeV"></b></div>
+      <label class="opt tm-sub" id="tmEnchOpts"><span>Enchanter range</span><input type="range" id="tmEnch" min="2" max="16"><b id="tmEnchV"></b></label>
+      <h3>PARTS <small>tap a power to add it</small></h3>
+      <div class="tm-powers" id="tmPowers"></div>
+      <h3>SELECTED POWERS <small>tap one to take it off</small></h3>
+      <div class="tm-selected" id="tmSelected"></div>
+      <div class="tm-desc" id="tmDesc"></div>
+    </div>
+  </div>
+  <div class="menu-buttons row">
+    <button class="sbtn gray" id="tmCancel">CANCEL</button>
+    <button class="mbtn red" id="tmDelete">DELETE</button>
+    <button class="mbtn" id="tmSave">SAVE TANK</button>
+  </div>
+</div>
+
+<!-- MULTIPLAYER: Local (several devices on one Wi-Fi) or Split Screen (two players, this device) -->
+<div id="multi" class="screen">
+  <div class="menu-bg"></div>
+  <h2>MULTIPLAYER</h2>
+  <div class="menu-buttons">
+    <button class="mbtn" id="mpLocal">LOCAL<small>2-10 players on the same Wi-Fi</small></button>
+    <button class="mbtn" id="mpSplit">SPLIT SCREEN<small>2 players on this device</small></button>
+    <button class="sbtn gray" id="mpBack">&#9664; BACK</button>
+  </div>
+  <div class="mp-lan" id="mpLan"></div>
+</div>
+
+<!-- PREPARE YOUR TANK: paint it, pick up to 2 powers, save / load -->
+<div id="prepare" class="screen tm">
+  <div class="menu-bg"></div>
+  <h2 id="ppTitle">PREPARE YOUR TANK</h2>
+  <div class="tm-wrap">
+    <div class="tm-col">
+      <canvas id="ppCanvas" width="720" height="560"></canvas>
+      <canvas id="ppPick" class="hidden"></canvas>
+      <div class="tm-tip">Pick a colour, then tap a part of your tank (or a part's name) to paint it.</div>
+      <div class="tm-parts" id="ppParts"></div>
+      <div class="tm-palrow"><span>COLOUR <i id="ppCur"></i></span><label>ANY COLOUR <input type="color" id="ppAny"></label><button class="sbtn gray" id="ppReset">BLACK &amp; WHITE</button></div>
+      <div class="pal-grid" id="ppPalette"></div>
+    </div>
+    <div class="tm-col">
+      <label class="opt" id="ppNameRow"><span>Your name</span><input id="ppName" class="ed-name" maxlength="14" spellcheck="false"></label>
+      <label class="opt"><span>Tank name</span><input id="ppTank" class="ed-name" maxlength="18" spellcheck="false"></label>
+      <div class="opt pp-fixed" id="ppFixed"></div>
+      <h3>TANK MODEL <small>10 shapes - same size in battle</small></h3>
+      <div class="pp-models" id="ppModels"></div>
+      <h3>WEAPON 1 <small>main fire button</small></h3>
+      <div class="tm-powers pp-weapons" id="ppW1"></div>
+      <h3>WEAPON 2 <small>second fire button</small></h3>
+      <div class="tm-powers pp-weapons" id="ppW2"></div>
+      <h3>X MARK COLOUR <small>left on the floor where you are destroyed</small></h3>
+      <div class="pal-grid pp-x" id="ppX"></div>
+      <h3>POWERS <small>tap to add - 2 at most</small></h3>
+      <div class="tm-powers" id="ppPowers"></div>
+      <h3>SELECTED POWERS <small>tap one to take it off</small></h3>
+      <div class="tm-selected pp-slots" id="ppSelected"></div>
+      <div class="tm-desc" id="ppDesc"></div>
+    </div>
+  </div>
+  <div class="menu-buttons row">
+    <button class="sbtn gray" id="ppBack">&#9664; BACK</button>
+    <button class="sbtn" id="ppLoad">LOAD PLAYER TANK</button>
+    <button class="sbtn" id="ppSave">SAVE TANK</button>
+    <button class="mbtn" id="ppReady">READY &#9654;</button>
+  </div>
+  <div class="ed-pop hidden" id="ppLoadBox"><h3>SAVED PLAYER TANKS</h3><div class="ed-llist" id="ppLoadList"></div><button class="sbtn gray" id="ppLoadClose">CLOSE</button></div>
+</div>
+
+<!-- LOCAL GAMES on this Wi-Fi -->
+<div id="lan" class="screen">
+  <div class="menu-bg"></div>
+  <h2>LOCAL GAMES</h2>
+  <div class="lan-note" id="lanNote"></div>
+  <div class="lan-list" id="lanList"></div>
+  <div class="menu-buttons row">
+    <button class="sbtn gray" id="lanBack">&#9664; BACK</button>
+    <button class="sbtn" id="lanTank">EDIT TANK</button>
+    <button class="sbtn" id="lanSearch">SEARCH AGAIN</button>
+    <button class="mbtn" id="lanHost">HOST A GAME</button>
+  </div>
+</div>
+
+<!-- LOBBY: 10 player squares round the map, chat on the side -->
+<div id="lobby" class="screen lobby">
+  <div class="menu-bg"></div>
+  <div class="lb-top"><button class="sbtn gray" id="lbLeave">&#9664; LEAVE LOBBY</button><h2 id="lbTitle">LOBBY</h2><button class="sbtn" id="lbTank">CHANGE TANK</button></div>
+  <div class="lb-main">
+    <div class="lb-ring" id="lbRing">
+      <div class="lb-mid" id="lbMid">
+        <canvas id="lbMap" width="480" height="300"></canvas>
+        <div class="lb-mapname" id="lbMapName"></div>
+        <div class="lb-rules"><span id="lbRulesText"></span><button class="sbtn" id="lbRules">GAME RULES</button></div>
+        <div class="lb-teams hidden" id="lbTeams"></div>
+        <div class="lb-btns"><button class="sbtn" id="lbPick">CHOOSE MAP</button><button class="mbtn" id="lbStart">START</button></div>
+        <div class="lb-wait" id="lbWait"></div>
+      </div>
+    </div>
+    <div class="lb-chat">
+      <div class="lb-msgs" id="lbMsgs"></div>
+      <form id="lbForm" class="lb-form"><input id="lbText" maxlength="120" placeholder="Say something..." autocomplete="off" spellcheck="false"><button class="sbtn" type="submit">SEND</button></form>
+    </div>
+  </div>
+</div>
+
+<!-- SPLIT SCREEN: the two tanks and the map -->
+<div id="splitset" class="screen">
+  <div class="menu-bg"></div>
+  <h2>SPLIT SCREEN</h2>
+  <div class="ss-wrap">
+    <div class="ss-card blue" id="ssP1"></div>
+    <div class="ss-mid"><canvas id="ssMap" width="480" height="300"></canvas><div class="lb-mapname" id="ssMapName"></div><button class="sbtn" id="ssPick">CHOOSE MAP</button><div class="lb-rules"><span id="ssRulesText"></span><button class="sbtn" id="ssRules">GAME RULES</button></div></div>
+    <div class="ss-card red" id="ssP2"></div>
+  </div>
+  <div class="menu-buttons row"><button class="sbtn gray" id="ssBack">&#9664; BACK</button><button class="mbtn" id="ssGo">FIGHT! &#9654;</button></div>
+  <div class="small ss-help">Touch: each player has a joystick on their half and their buttons down their edge.<br>
+    PC: <b class="b">BLUE</b> WASD drive, Q / E turret, F weapon 1, R weapon 2, G mine, H teleport &middot; <b class="r">RED</b> arrows drive, ; / ' turret, / weapon 1, right shift weapon 2, . mine, , teleport &middot; Tab leaderboard</div>
+</div>
+
+<!-- MAP CHOICE (the lobby host, or split screen) -->
+<div class="ed-pop hidden mp-pick" id="mapPick">
+  <h3>CHOOSE A MAP <small id="mpNeed"></small></h3>
+  <div class="ed-tabs" id="mpTabs"><button data-mtab="created">CREATED MAPS</button><button data-mtab="campaign">CAMPAIGN MAPS</button></div>
+  <div class="mp-list" id="mpList"></div>
+  <button class="sbtn gray" id="mpClose">CLOSE</button>
+</div>
+
+<!-- GAME RULES (the lobby host, or split screen) -->
+<div class="ed-pop hidden rules-pop" id="rulesPop">
+  <h3>GAME RULES</h3>
+  <div class="rules-body" id="rulesBody"></div>
+  <div class="menu-buttons row"><button class="sbtn gray" id="rulesClose">CLOSE</button><button class="mbtn" id="rulesDone">DONE</button></div>
+</div>
+
+<!-- MULTIPLAYER PAUSE -->
+<div id="vsPause" class="screen overlay">
+  <h2>PAUSED</h2>
+  <div class="menu-buttons"><button class="mbtn" id="vpContinue">CONTINUE</button><button class="mbtn red" id="vpQuit">QUIT</button></div>
+  <div class="small" id="vpNote"></div>
+</div>
+
+<!-- PAUSE (over the game) -->
+<div id="pause" class="screen overlay">
+  <h2>PAUSED</h2>
+  <div class="menu-buttons">
+    <button class="mbtn" id="pauseContinue">CONTINUE</button>
+    <button class="mbtn" id="pauseSave">SAVE GAME</button>
+    <button class="mbtn" id="pauseOptions">OPTIONS</button>
+    <button class="mbtn red" id="pauseQuit">QUIT GAME</button>
+  </div>
+  <div class="small" id="pauseNote"></div>
+</div>
+
+<!-- CONFIRM (yes / no) -->
+<div id="confirm" class="screen overlay top">
+  <div class="dialog">
+    <p id="confirmText">Are you sure?</p>
+    <div class="menu-buttons row">
+      <button class="mbtn red" id="confirmYes">YES</button>
+      <button class="mbtn gray" id="confirmNo">NO</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="lib/peerjs.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/custom.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/game.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/net.js"></script>
+<script src="js/versus.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
