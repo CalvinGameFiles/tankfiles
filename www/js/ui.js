@@ -183,6 +183,12 @@ const UI = (() => {
     document.addEventListener('dblclick', e => e.preventDefault());
   }
 
+  // the Android app's BACK button: the same as Esc (close a pop-up, step out of a menu, pause a match)
+  window.onBackButton = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape' }));
+    const back = ['levelsBack', 'slotsBack', 'optBack', 'mpBack', 'lanBack', 'ssBack', 'ppBack'].map(id => $(id)).find(b => b && b.closest('.screen.active'));
+    if (back && !$('confirm').classList.contains('active')) back.click();
+  };
   document.addEventListener('DOMContentLoaded', init);
   return { page, openSlots, confirm, toast, get deleting() { return deleting; }, get slotMode() { return slotMode; } };
 })();

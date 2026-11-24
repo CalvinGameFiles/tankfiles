@@ -5,3 +5,12 @@ debug/_*.py
 debug/_*.txt
 scripts/_*.py
 node_modules/
+android/app/src/main/assets/
+android/.gradle/
+android/build/
+android/app/build/
+*.apk
+# the signing key stays on this PC (the cloud build gets it from the repository secrets)
+*.p12
+*.jks
+android/signing-password.txt
