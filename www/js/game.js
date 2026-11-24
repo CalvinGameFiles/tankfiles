@@ -29,11 +29,13 @@ const Game = (() => {
   let customLevel = null, customDone = null, editHover = null, inset = { l: 0, t: 0, r: 0, b: 0 };   // level creator: the level being edited / tested
   const keys = {}, mouse = { x: 0, y: 0, inside: false };
   const sticks = { move: null, aim: null };    // move: a thumb stick {id, ox, oy, x, y, dx, dy, len}; aim: the finger the turret follows {id, ox, oy, x, y, t0, moved}
-  // PHONE CAMERA: on a touch screen the map is zoomed in and follows your tank. zoom 0 = the whole map, 1 = big, 2 = huge
+  // ZOOM CAMERA: Options > Map zoom (0 = the whole map ... 1 = 5 squares tall) zooms in and follows your tank.
+  // Not set yet: phones start at 80% (about 6-7 squares tall), PCs on the whole map. The in-game button flips between ALL and your zoom.
   const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  let zoom = (() => { const z = +localStorage.getItem('tankfiles.zoom'); return z >= 0 && z <= 2 && localStorage.getItem('tankfiles.zoom') !== null ? z : 1; })();
-  const ZOOM_ROWS = [0, 6.5, 5];               // how many squares tall the screen shows at each zoom
-  const ZOOM_NAME = ['ALL', 'BIG', 'HUGE'];
+  let zoomAll = false;                         // the in-game button: show the whole map for now
+  const MAX_ZOOM_ROWS = 5;                     // fully zoomed in, the screen is this many squares tall
+  const zoomPref = () => { const z = Store.opts.zoom; return typeof z === 'number' ? Math.max(0, Math.min(1, z)) : coarse ? 0.8 : 0; };
+  const zoomAmt = () => zoomAll ? 0 : zoomPref();
   let onPause = () => {}, onLeave = () => {};
 
   // ---------- rooms ----------
@@ -1031,13 +1033,13 @@ const Game = (() => {
   }
   const touchDev = () => touchMode || coarse;
   // the camera is on for your own tank on a phone: the campaign, a level-creator test and Local games (not split screen, the level creator or teleport placing)
-  function camOn() { return touchDev() && zoom > 0 && state !== 'edit' && state !== 'idle' && state !== 'place' && !(vs && vs.role === 'local'); }
+  function camOn() { return zoomAmt() > 0 && state !== 'edit' && state !== 'idle' && state !== 'place' && !(vs && vs.role === 'local'); }
   function camTarget() { if (vs) { const P = vs.players.find(q => q.ctl === 'me'); return P ? P.tank : null; } return player; }
   function applyCam(dt) {
     const aw = Math.max(50, view.cw - inset.l - inset.r), ah = Math.max(50, view.ch - inset.t - inset.b);   // the level creator's panels take some of the screen
     const fit = Math.min(aw / W, ah / H);
     let s = fit, ox, oy;
-    if (camOn()) s = Math.max(fit, ah / ZOOM_ROWS[zoom] / TILE);
+    if (camOn()) { const max = Math.max(fit, ah / MAX_ZOOM_ROWS / TILE); s = fit * Math.pow(max / fit, zoomAmt()); }   // even steps from the whole map to close up
     const vw = W * s, vh = H * s, t = camTarget();
     ox = inset.l + (aw - vw) / 2; oy = inset.t + (ah - vh) / 2;
     if (t && vw > aw) ox = Math.max(inset.l + aw - vw, Math.min(inset.l, inset.l + aw / 2 - t.x * s));
@@ -1047,7 +1049,9 @@ const Game = (() => {
     view.ox += (ox - view.ox) * k; view.oy += (oy - view.oy) * k;
   }
   function cycleZoom() {
-    zoom = (zoom + 1) % 3; localStorage.setItem('tankfiles.zoom', zoom); Sfx.click && Sfx.click(); applyCam(0);
+    if (zoomPref() === 0) { Store.setOpt('zoom', 0.8); zoomAll = false; }   // zoom set to ALL in Options: the button zooms to 80%
+    else zoomAll = !zoomAll;
+    Sfx.click && Sfx.click(); applyCam(0);
   }
   // the turret follows the finger: the world point under it, every frame (so it keeps pointing there while you drive)
   function fingerAim(t) { const s = sticks.aim; if (!s) return null; const w = toWorld(s.x, s.y); return Math.atan2(w.y - t.y, w.x - t.x); }
@@ -1066,7 +1070,7 @@ const Game = (() => {
     ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx + rad * 0.75, cy + rad * 0.75); ctx.lineTo(cx + rad * 1.6, cy + rad * 1.6); ctx.stroke(); ctx.lineCap = 'butt';
     ctx.fillStyle = '#f0c25c'; ctx.font = font(r.w * 0.26); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText(ZOOM_NAME[zoom], r.x + r.w / 2, r.y + r.h - 2);
+    ctx.fillText(zoomAmt() > 0 ? 'ZOOM' : 'ALL', r.x + r.w / 2, r.y + r.h - 2);
   }
   const toWorld = (sx, sy) => ({ x: (sx - view.ox) / view.scale, y: (sy - view.oy) / view.scale });
 

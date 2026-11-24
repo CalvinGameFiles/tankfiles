@@ -112,7 +112,10 @@ const UI = (() => {
     $('optSfx').value = o.sfx; $('optSfxV').textContent = Math.round(o.sfx * 100) + '%';
     $('optMusic').value = o.music; $('optMusicV').textContent = Math.round(o.music * 100) + '%';
     $('optShake').checked = !!o.shake; $('optAim').checked = !!o.aimLine;
+    const z = typeof o.zoom === 'number' ? o.zoom : (window.matchMedia && matchMedia('(pointer: coarse)').matches ? 0.8 : 0);
+    $('optZoom').value = z; $('optZoomV').textContent = zoomText(z);
   }
+  const zoomText = z => z <= 0 ? 'ALL' : Math.round(z * 100) + '%';
   function openOptions(from) { optionsFrom = from; loadOptions(); overlay('pause', false); page('options'); }
   function closeOptions() {
     if (optionsFrom === 'pause') { page(null); overlay('pause', true); } else page('title');
@@ -174,6 +177,7 @@ const UI = (() => {
     $('optSfx').addEventListener('change', () => Sfx.fire());
     $('optMusic').addEventListener('input', e => { Store.setOpt('music', +e.target.value); $('optMusicV').textContent = Math.round(e.target.value * 100) + '%'; });
     $('optShake').addEventListener('change', e => Store.setOpt('shake', e.target.checked));
+    $('optZoom').addEventListener('input', e => { Store.setOpt('zoom', +e.target.value); $('optZoomV').textContent = zoomText(+e.target.value); });
     $('optAim').addEventListener('change', e => Store.setOpt('aimLine', e.target.checked));
     $('optReset').addEventListener('click', () => { Store.resetOpts(); loadOptions(); toast('Options reset'); });
     $('optBack').addEventListener('click', () => { Sfx.click(); closeOptions(); });

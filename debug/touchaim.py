@@ -63,14 +63,29 @@ try:
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": [{"x": q["x"] - 140, "y": q["y"], "id": 1}]}); cdp.pump(0.05)   # lift only the tapping finger
     check("while driving, a tap on the left side still fires", E(f"{D}.shells.length") == 1 or E(f"{D}.player.fireCD") > 0)   # (a shot right against a wall puffs out, but it was fired)
     touch("touchEnd", [])
-    # zoom button
-    z = E("Game.debug.screenOf(0, 40).y - Game.debug.screenOf(0, 0).y")
-    r = 360 * 0.085; tap(800 - 28 - 360 * 0.17 + r / 2, 14 + r / 2); cdp.pump(0.05)
-    z2 = E("Game.debug.screenOf(0, 40).y - Game.debug.screenOf(0, 0).y")
-    check("ZOOM button: BIG -> HUGE", z2 > z + 5 and E("localStorage.getItem('tankfiles.zoom')") == "2", (z, z2))
-    shot("43-zoom-huge")
-    tap(800 - 28 - 360 * 0.17 + r / 2, 14 + r / 2); cdp.pump(0.05)
-    check("...HUGE -> ALL (whole map on screen)", E("Game.debug.screenOf(Game.debug.consts.W, Game.debug.consts.H).y") <= 361 and E("Game.debug.screenOf(0, 0).y") >= -1)
+    # zoom: Options > Map zoom slider, and the in-game button flips between ALL and that zoom
+    sq = lambda: E("Game.debug.screenOf(0, 40).y - Game.debug.screenOf(0, 0).y")
+    allOn = lambda: E("Game.debug.screenOf(Game.debug.consts.W, Game.debug.consts.H).y") <= 361 and E("Game.debug.screenOf(0, 0).y") >= -1
+    z80 = sq()
+    E("Store.setOpt('zoom', 1)"); cdp.pump(0.1)
+    check("zoom 100%: 5 squares fill the screen height", abs(sq() - 72) < 1, sq())
+    shot("43-zoom-max")
+    E("Store.setOpt('zoom', 0.4)"); cdp.pump(0.1)
+    check("zoom 40%: further out than 80%", sq() < z80 - 5, (sq(), z80))
+    E("Store.setOpt('zoom', 0)"); cdp.pump(0.1)
+    check("zoom ALL: the whole map", allOn())
+    E("Store.setOpt('zoom', 0.6)"); cdp.pump(0.1)
+    r = 360 * 0.085; btn = (800 - 28 - 360 * 0.17 + r / 2, 14 + r / 2)
+    tap(*btn); cdp.pump(0.1)
+    check("button: whole map for now", allOn())
+    tap(*btn); cdp.pump(0.1)
+    check("...and back to your zoom", not allOn() and E("Store.opts.zoom") == 0.6)
+    # the Options page slider
+    E("Game.pause()"); E("document.getElementById('pauseOptions').click()"); cdp.pump(0.2)
+    check("Options shows the Map zoom slider at 60%", E("document.getElementById('optZoomV').textContent") == "60%")
+    E("const z = document.getElementById('optZoom'); z.value = 0; z.dispatchEvent(new Event('input'))")
+    check("slider all the way left = ALL", E("document.getElementById('optZoomV').textContent") == "ALL" and E("Store.opts.zoom") == 0)
+    shot("44-options-zoom")
     check("no script errors", E("window.__errs") == [], E("window.__errs"))
 finally:
     proc.kill(); srv.kill()
