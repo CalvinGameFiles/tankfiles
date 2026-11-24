@@ -19,9 +19,9 @@ const POWERS = [
   { id: 'multi4', label: 'Multi Shot 4', desc: 'Up to 5 shots in the air at once.' },
   { id: 'multi5', label: 'Multi Shot 5', desc: 'Up to 6 shots in the air at once.' },
   { id: 'flame', label: 'Flame Thrower', desc: 'Throws two-square-wide waves of fire, like the orange tank.' },
-  { id: 'homing', label: 'Heat Seeking Rocket', desc: 'A bright orange rocket at bullet speed that follows the player round walls. It can be shot down.' },
+  { id: 'homing', label: 'Heat Seeking Rocket', desc: 'A slow, bright orange rocket that follows the player round walls. It can be shot down.' },
   { id: 'frost', label: 'Frost Shot', desc: 'A light blue rocket, faster than a normal one. Where it hits, ice covers 3x3 squares and freezes every tank there for 20 seconds (they can still aim and shoot).' },
-  { id: 'laser', label: 'Super Laser', desc: 'A beam for 3 seconds that goes through walls. Slow turret, 6 seconds to charge between shots.' },
+  { id: 'laser', label: 'Super Laser', desc: 'Warns with a red sight line for 1 second, then a 3 second beam that goes through walls. Its turret is slow enough to outrun. 6 seconds to charge.' },
   { id: 'mines', label: 'Mines', desc: 'Lays mines, and runs clear of them.' },
   { id: 'suicide', label: 'Suicide', desc: 'No gun. Chases the player down and blows itself up on contact. No other powers except Suicide Dropper.' },
   { id: 'dropper', label: 'Suicide Dropper', desc: 'When it dies it leaves a pool of the liquid you pick, 1x1 up to 5x5 squares.' },
@@ -74,7 +74,7 @@ function customType(spec) {
   if (P.has('rocket')) Object.assign(T, { rocket: true, bounces: 0, speed: 2.0, aim: 0.08, ricochet: 0 });
   if (P.has('bouncy')) Object.assign(T, { rocket: true, bounces: 2, speed: 2.0, aim: 0.04, ricochet: 0.9 });
   if (P.has('flame')) Object.assign(T, { flame: true, bounces: 0, speed: 0.8, fire: [3, 3], ricochet: 0, shells: multi ? multi + 1 : 2 });
-  if (P.has('homing')) Object.assign(T, { homing: true, bounces: 3, speed: 1.0, fire: [2.0, 3.5], ricochet: 0 });
+  if (P.has('homing')) Object.assign(T, { homing: true, bounces: 3, speed: 0.6, fire: [2.0, 3.5], ricochet: 0 });
   if (P.has('frost')) Object.assign(T, { frost: true, bounces: 0, speed: 2.6, fire: [1.8, 3.2], ricochet: 0, aim: 0.06 });
   if (P.has('laser')) Object.assign(T, { laser: true, shells: 0, turn: 0.6, range: [4, 9] });
   if (P.has('mines')) T.mines = [4, 8];
@@ -114,21 +114,21 @@ const TANK_MODELS = [
 ];
 // The weapons a player can carry (any two different ones). shells = how many can be flying at once.
 const PVP_WEAPON_LIST = [
-  { id: 'shell', label: 'Shell', desc: 'The normal shell: bounces once. Up to 5 flying at once.' },
+  { id: 'shell', label: 'Shell', desc: 'The normal shell: bounces once. Up to 3 flying at once.' },
   { id: 'rocket', label: 'Rocket', desc: 'Fast rockets that burst on the first wall. Up to 2 flying at once.' },
   { id: 'bouncy', label: 'Bouncy Rocket', desc: 'Fast rockets that bounce off two walls. Only 2 flying at once.' },
-  { id: 'homing', label: 'Heat Seeking Rocket', desc: 'Bright orange rockets that chase the nearest enemy round the walls. Up to 3 at once. They can be shot down.' },
+  { id: 'homing', label: 'Heat Seeking Rocket', desc: 'Slow orange rockets that chase the nearest enemy round the walls. Fire all 3 and it takes 4 seconds to reload. They can be shot down.' },
   { id: 'frost', label: 'Frost Shot', desc: 'Light blue shots: where one hits, 3x3 squares ice over and freeze every tank there for 20 s (they can still aim and shoot). Up to 3 shots or ice spots until they melt.' },
   { id: 'flame', label: 'Flame Thrower', desc: 'Throws a two-square-wide wave of fire. One wave flying at a time.' },
-  { id: 'laser', label: 'Super Laser', desc: 'A 3 second beam that goes through walls. The turret turns slowly while it fires, then 6 seconds to charge.' },
+  { id: 'laser', label: 'Super Laser', desc: 'A red sight line warns everyone, then a 3 second beam that goes through walls. The turret sweeps slowly while it fires (you can outrun it), then 6 seconds to charge.' },
 ];
 const PVP_WEAPON = Object.fromEntries(PVP_WEAPON_LIST.map(w => [w.id, w]));
 const PVP_WEAPONS = PVP_WEAPON_LIST.map(w => w.id);
 const WEAPON_STATS = {
-  shell: { shells: 5, bounces: 1, speed: 1.0 },
+  shell: { shells: 3, bounces: 1, speed: 1.0 },                         // the user's rule: 3 shells at once in multiplayer
   rocket: { rocket: true, shells: 2, bounces: 0, speed: 2.0 },
   bouncy: { rocket: true, shells: 2, bounces: 2, speed: 2.0 },          // the user's rule: only 2 bouncy rockets flying at once
-  homing: { homing: true, shells: 3, bounces: 3, speed: 1.0 },
+  homing: { homing: true, shells: 3, bounces: 3, speed: 0.6 },          // slow; all 3 fired = a 4 s reload (game.js SEEK_RELOAD)
   frost: { frost: true, shells: 3, bounces: 0, speed: 2.6 },
   flame: { flame: true, shells: 1, bounces: 0, speed: 0.8 },
   laser: { laser: true, shells: 0, bounces: 0, speed: 1.0 },

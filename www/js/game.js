@@ -221,6 +221,8 @@ const Game = (() => {
     if (!t.out) t.out = [0, 0];
     if (W.flame) { if (shells.some(s => s.flame && s.owner === t && s.slot === slot && !s.dead)) return false; return fireWave(t, SHELL_SPEED * W.speed, slot); }
     if (t.out[slot] >= W.shells) return false;
+    if (!t.wcd) t.wcd = [0, 0];
+    if (t.wcd[slot] > 0) return false;
     if (W.frost && t.out[slot] + ices.filter(i => i.spot && i.owner === t).length >= 3) return false;
     const a = t.turret, bx = t.x + Math.cos(a) * (t.r + 10), by = t.y + Math.sin(a) * (t.r + 10);
     const h0 = t.h === 2 ? liftAt(bx, by) : t.h;
@@ -229,10 +231,12 @@ const Game = (() => {
     shells.push({ id: ++shellId, x: bx, y: by, h: h0, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, bounces: 0, maxB: W.bounces, owner: t, age: 0, rocket: !!W.rocket,
       homing: !!W.homing, frost: !!W.frost, life: 10, slot, target: W.homing ? pickTarget(t, t.x, t.y) : null });
     t.out[slot]++; t.shells++; t.recoil = 1; t.fireCD = 0.12; t.revealT = 3;
+    if (W.homing) { t.seekN = (t.seekN || 0) + 1; if (t.seekN >= W.shells) { t.seekN = 0; t.wcd[slot] = SEEK_RELOAD; } }   // all 3 fired: 4 s to reload
     smoke.push(puff(bx, by, 6, 0.35, 'rgba(255,230,160,'));
     Sfx.fire();
     return true;
   }
+  const SEEK_RELOAD = 4;
   // a shell is gone: its owner may fire another (multiplayer tanks count per weapon)
   function shellGone(s) {
     const o = s.owner; if (!o) return;
@@ -258,11 +262,16 @@ const Game = (() => {
     return n > 0;
   }
   // a multiplayer Super Laser: 3 s beam, then 6 s to charge (the countdown runs in update)
+  // It warns first (LASER_WARN s, the turret held still and a red sight line showing) so whoever is in the way can get out.
+  const LASER_WARN = 0.7;
   function fireLaser(t) {
-    if (t.beamT > 0 || t.charge > 0) return false;
-    t.beamT = 3; t.beamHits = new Map(); t.recoil = 1; t.revealT = 3; Sfx.laser();
+    if (t.beamT > 0 || t.warnT > 0 || t.charge > 0) return false;
+    t.warnT = LASER_WARN; t.revealT = 3;
     return true;
   }
+  function startBeam(t) { t.beamT = 3; t.beamHits = new Map(); t.recoil = 1; t.revealT = 3; Sfx.laser(); }
+  // how fast a laser's turret may sweep: slower than a tank can drive across it at that distance, so you can always outrun the beam
+  const beamSweep = (dist, cap) => Math.min(cap, 0.55 * TANK_SPEED / Math.max(TILE, dist));
   // the nearest other tank: what a multiplayer heat seeker chases (a tank still in its spawn shield only if nobody else is about)
   function pickTarget(owner, x, y) {
     let best = null, bd = Infinity;
@@ -396,7 +405,7 @@ const Game = (() => {
     if (drop) spillBox(tileC(t.x), tileC(t.y), drop.size, LIQ[drop.liquid] || OIL);
     if (t.train) cutTrain(t);
     if (t.cars) { for (const c of t.cars) { c.train = null; c.freeT = 10; c.moving = false; } t.cars = []; }
-    t.beamT = 0; t.shield = null;
+    t.beamT = 0; t.warnT = 0; t.shield = null;
     if (vs) { vsKilled(t, by); return; }
     if (t === player) {
       save.deaths++; save.lives--;
@@ -504,6 +513,8 @@ const Game = (() => {
       if (t.frozen > 0) t.frozen -= dt; if (t.hurtT > 0) t.hurtT -= dt; if (A.teleCD > 0) A.teleCD -= dt;
       if (t.revealT > 0) t.revealT -= dt; if (t.spawnT > 0) t.spawnT -= dt; if (!t.ai && t.charge > 0 && !(t.beamT > 0)) t.charge -= dt;
       if (t.beamT > 0 && (t.beamT -= dt) <= 0) { t.beamT = 0; A.charge = 6; }     // a super laser fires for 3 s, then charges for 6
+      if (t.warnT > 0 && (t.warnT -= dt) <= 0) { t.warnT = 0; if (t.alive) startBeam(t); }
+      if (t.wcd) for (let k = 0; k < 2; k++) if (t.wcd[k] > 0) t.wcd[k] -= dt;    // heat seekers reloading
     }
     for (const t of tanks) if (t.alive) t.h = hAt(t.x, t.y);
     for (const t of tanks) if (t.alive && !lavaProof(t) && onLava(t.x, t.y)) {                      // the middle of a lava square is death
@@ -529,13 +540,16 @@ const Game = (() => {
     }
   }
   // smoke, sparks, tracks, X marks, ice melting: the parts of a frame that are only for show
+  const MAX_SMOKE = 350;
   function updateFx(dt) {
     for (const i of ices) i.age += dt;
     ices = ices.filter(i => i.age < i.life);
     for (const p of smoke) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; p.r += 12 * dt; }
     smoke = smoke.filter(p => p.age < p.life);
+    if (smoke.length > MAX_SMOKE) smoke.splice(0, smoke.length - MAX_SMOKE);     // lots of rockets at once: drop the oldest puffs
     for (const b of bits) { b.age += dt; b.x += b.vx * dt; b.y += b.vy * dt; b.vx *= 0.93; b.vy *= 0.93; b.rot += b.vr * dt; }
     bits = bits.filter(b => b.age < b.life);
+    if (bits.length > 300) bits.splice(0, bits.length - 300);
     for (const r of rings) r.age += dt;
     rings = rings.filter(r => r.age < r.life);
     for (const t of tracks) t.age += dt;
@@ -722,14 +736,16 @@ const Game = (() => {
   }
   // Super laser: the slow turret tracks the player (walls do not matter); once charged and lined up, a 3 s beam,
   // then 6 s to charge again. It holds fire while a friend stands in the beam's path.
+  // Lined up and charged, it WARNS for 1 s (turret frozen, red sight line) before the beam, and its turret always sweeps
+  // slower than you can drive at that distance - so you can dodge it, and outrun it while it fires.
   function laserBrain(t, dt) {
-    const A = t.ai, T = A.T, want = Math.atan2(player.y - t.y, player.x - t.x), d = angDiff(t.turret, want), turn = T.turn * dt;
+    const A = t.ai, T = A.T, want = Math.atan2(player.y - t.y, player.x - t.x), d = angDiff(t.turret, want);
+    if (A.warn > 0) { if ((A.warn -= dt) <= 0) { A.warn = 0; startBeam(t); } return; }
+    const turn = beamSweep(Math.hypot(player.x - t.x, player.y - t.y), T.turn * (t.beamT > 0 ? 0.6 : 0.75)) * dt;
     t.turret += Math.abs(d) < turn ? d : Math.sign(d) * turn;
     if (t.beamT > 0) return;                                               // the beam runs its 3 s in update()
     A.charge -= dt;
-    if (A.charge <= 0 && Math.abs(d) < 0.08 && !tanks.some(o => o !== t && o !== player && o.alive && onBeam(t, o.x, o.y, o.r + 8))) {
-      t.beamT = 3; t.beamHits = new Map(); t.recoil = 1; Sfx.laser();
-    }
+    if (A.charge <= 0 && Math.abs(d) < 0.08 && !tanks.some(o => o !== t && o !== player && o.alive && onBeam(t, o.x, o.y, o.r + 8))) A.warn = 1.0;
   }
   // Heat seekers: distances from the player's square over everything a shell can cross (rebuilt at most once a frame)
   // (multiplayer: from whichever tank the rocket chases)
@@ -1026,7 +1042,7 @@ const Game = (() => {
   // ---------- drawing ----------
   function resize() {
     if (!canvas) return;
-    dpr = Math.min(2, window.devicePixelRatio || 1);
+    dpr = Math.min(2, window.devicePixelRatio || 1, perf.maxDpr);
     view.cw = window.innerWidth; view.ch = window.innerHeight;
     canvas.width = Math.round(view.cw * dpr); canvas.height = Math.round(view.ch * dpr);
     applyCam(0);
@@ -1167,6 +1183,14 @@ const Game = (() => {
   }
   function drawBeams() {
     for (const t of tanks) {
+      const warn = t.alive && !(t.beamT > 0) && (t.warnT > 0 || (t.ai && t.ai.warn > 0));
+      if (warn) {
+        const a = t.turret, x0 = t.x + Math.cos(a) * (t.r + 16), y0 = t.y + Math.sin(a) * (t.r + 16), L = (W + H) * 2;
+        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+        ctx.strokeStyle = Math.floor(clock * 14) % 2 ? 'rgba(255,20,70,0.95)' : 'rgba(255,90,140,0.85)'; ctx.lineWidth = 3.5; ctx.setLineDash([12, 7]);
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + Math.cos(a) * L, y0 + Math.sin(a) * L); ctx.stroke(); ctx.restore();
+        continue;
+      }
       if (!t.alive || !(t.beamT > 0)) continue;
       const a = t.turret, x0 = t.x + Math.cos(a) * (t.r + 16), y0 = t.y + Math.sin(a) * (t.r + 16), L = (W + H) * 2, x1 = x0 + Math.cos(a) * L, y1 = y0 + Math.sin(a) * L;
       const f = 0.8 + 0.2 * Math.sin(clock * 60);
@@ -2100,7 +2124,13 @@ const Game = (() => {
     if (rot) return { mv, aim: t.turret + rot, rate: Math.min(3, turnRate(t)) };
     return { mv, aim: l > 0.25 ? Math.atan2(dy, dx) : null, rate: Math.min(7, turnRate(t)) };
   }
-  const turnRate = t => (t.beamT > 0 ? 1.1 : 99);                              // a Super Laser drags the turret round while it fires
+  // a Super Laser holds still while it warns, then drags the turret round slower than the nearest enemy can drive
+  const turnRate = t => {
+    if (t.warnT > 0) return 0;
+    if (!(t.beamT > 0)) return 99;
+    let d = Infinity; for (const o of tanks) if (o !== t && o.alive && !sameTeam(o, t)) d = Math.min(d, Math.hypot(o.x - t.x, o.y - t.y));
+    return beamSweep(d, 0.6);
+  };
   const keepsLives = () => vs.rules.mode === 'battle';                         // SLAYER / SLAUGHTER: no lives, respawn forever
   const canRespawn = P => !P.left && (!keepsLives() || P.lives > 0);
   function turnTurret(t, want, rate, dt) { const d = angDiff(t.turret, want), turn = rate * dt; t.turret += Math.abs(d) < turn ? d : Math.sign(d) * turn; }
@@ -2131,7 +2161,7 @@ const Game = (() => {
       }
       if (best) [x, y] = best;
     }
-    Object.assign(t, { x, y, h: hAt(x, y), alive: true, spawnT: SPAWN_SHIELD, frozen: 0, beamT: 0, charge: 0, moving: false, lastTrack: null, hurtT: 0, revealT: 0 });
+    Object.assign(t, { x, y, h: hAt(x, y), alive: true, spawnT: SPAWN_SHIELD, frozen: 0, beamT: 0, warnT: 0, wcd: [0, 0], charge: 0, moving: false, lastTrack: null, hurtT: 0, revealT: 0 });
     t.hull = t.turret = faceMiddle(x, y); t.warp++;
     emit('spawn', x, y);
   }
@@ -2237,7 +2267,8 @@ const Game = (() => {
     for (let i = 0; i < map.length; i++) if (map[i] !== vs.prevMap[i]) { md.push(i, map[i]); vs.prevMap[i] = map[i]; }
     vs.send({ t: 'snap', s: state, st: r1(stateT), w: vs.winner, wt: vs.winTeam, tl: r1(vs.timeLeft),
       tk: vs.players.map(P => { const t = P.tank; return [r1(t.x), r1(t.y), r2(t.hull), r2(t.turret), t.alive ? 1 : 0, r1(t.frozen > 0 ? t.frozen : 0), r1(t.spawnT > 0 ? t.spawnT : 0), t.warp,
-        P.lives, P.kills, r1(t.revealT > 0 ? t.revealT : 0), r1(t.beamT > 0 ? t.beamT : 0), r1(t.charge > 0 ? t.charge : 0), t.moving ? 1 : 0, t.shells, t.mines, P.left ? 1 : 0, t.out[0], t.out[1], P.deaths]; }),
+        P.lives, P.kills, r1(t.revealT > 0 ? t.revealT : 0), r1(t.beamT > 0 ? t.beamT : 0), r1(t.charge > 0 ? t.charge : 0), t.moving ? 1 : 0, t.shells, t.mines, P.left ? 1 : 0, t.out[0], t.out[1], P.deaths,
+        r1(t.warnT > 0 ? t.warnT : 0), r1(t.wcd && t.wcd[0] > 0 ? t.wcd[0] : 0), r1(t.wcd && t.wcd[1] > 0 ? t.wcd[1] : 0)]; }),
       sh: shells.filter(s => !s.dead).map(s => [s.id, r1(s.x), r1(s.y), r1(s.vx), r1(s.vy), s.h, (s.rocket ? 1 : 0) | (s.homing ? 2 : 0) | (s.frost ? 4 : 0) | (s.flame ? 8 : 0), idx(s.owner), s.maxB - s.bounces, r1(s.seed || 0)]),
       mn: mines.map(m => [m.id, r1(m.x), r1(m.y), r2(m.t), m.lit ? 1 : 0, r2(Math.min(m.boomAt, 999)), idx(m.owner)]),
       md, ev: vs.events, po: [...vs.padOwner] });
@@ -2269,7 +2300,8 @@ const Game = (() => {
     vs.winner = m.w; vs.winTeam = m.wt != null ? m.wt : -1; if (m.tl != null) vs.timeLeft = m.tl;
     (m.tk || []).forEach((a, i) => {
       const P = vs.players[i]; if (!P) return;
-      const t = P.tank, [x, y, hull, tur, alive, fr, sp, warp, lives, kills, rv, beam, charge, moving, shN, mnN, left, o0, o1, deaths] = a, was = t.alive;
+      const t = P.tank, [x, y, hull, tur, alive, fr, sp, warp, lives, kills, rv, beam, charge, moving, shN, mnN, left, o0, o1, deaths, warn, wc0, wc1] = a, was = t.alive;
+      t.warnT = warn || 0; t.wcd = [wc0 || 0, wc1 || 0];
       P.lives = lives; P.kills = kills; P.left = !!left; P.deaths = deaths | 0;
       t.frozen = fr; t.spawnT = sp; t.revealT = rv; t.charge = charge; t.shells = shN; t.mines = mnN; t.out = [o0 | 0, o1 | 0];
       if (beam > 0 && !(t.beamT > 0)) { Sfx.laser(); t.recoil = 1; }
@@ -2317,6 +2349,7 @@ const Game = (() => {
     if (state === 'playing' && vs.timeLeft > 0) vs.timeLeft = Math.max(0, vs.timeLeft - dt);
     for (const t of tanks) {
       if (t.frozen > 0) t.frozen -= dt; if (t.revealT > 0) t.revealT -= dt; if (t.spawnT > 0) t.spawnT -= dt; if (t.beamT > 0) t.beamT -= dt;
+      if (t.warnT > 0) t.warnT -= dt; if (t.wcd) for (let k = 0; k < 2; k++) if (t.wcd[k] > 0) t.wcd[k] -= dt;
       t.recoil = Math.max(0, t.recoil - dt * 6);
     }
     for (const P of vs.players) {
@@ -2361,7 +2394,7 @@ const Game = (() => {
   const WSHORT = { shell: 'SHELL', rocket: 'ROCKET', bouncy: 'BOUNCY', homing: 'SEEKER', frost: 'FROST', flame: 'FLAME', laser: 'LASER' };
   const wName = (t, k) => (k === 1 && t.pw.slot2 === 'mine' ? 'MINE' : k === 1 && !t.pw.slot2 ? 'OFF' : t.pw.wp[k] ? WSHORT[t.pw.wp[k].id] || 'FIRE' : 'FIRE');
   // aiming with the mouse / a touch: snap the turret to the aim unless that weapon is the laser (it drags round)
-  const snapAim = (t, k, a) => { if (!(t.pw.wp[k] && t.pw.wp[k].laser) && !(t.beamT > 0)) t.turret = a; };
+  const snapAim = (t, k, a) => { if (!(t.pw.wp[k] && t.pw.wp[k].laser) && !(t.beamT > 0) && !(t.warnT > 0)) t.turret = a; };
   function vsKey(e) {
     if (e.code === 'Tab') { lb.open = !lb.open; e.preventDefault(); return; }
     if (state !== 'playing') return;
@@ -2484,7 +2517,8 @@ const Game = (() => {
   function ammoText(t, k) {
     if (k === 1 && t.pw.slot2 === 'mine') return Math.max(0, MAX_MINES - t.mines) + '/' + MAX_MINES;
     const W = t.pw.wp[k]; if (!W) return '';
-    if (W.laser) return t.beamT > 0 ? 'FIRING' : t.charge > 0 ? Math.ceil(t.charge) + 's' : 'READY';
+    if (W.laser) return t.beamT > 0 || t.warnT > 0 ? 'FIRING' : t.charge > 0 ? Math.ceil(t.charge) + 's' : 'READY';
+    if (t.wcd && t.wcd[k] > 0) return 'RELOAD ' + Math.ceil(t.wcd[k]) + 's';
     if (W.flame) return shells.some(s => s.flame && s.owner === t && s.slot === k) ? '...' : 'READY';
     return Math.max(0, W.shells - ((t.out && t.out[k]) || 0)) + '/' + W.shells;
   }
@@ -2674,8 +2708,16 @@ const Game = (() => {
   }
 
   let last = 0;
+  // A phone that can't keep up (under ~40 frames a second for 2 s of play) draws at a lower resolution: 2x -> 1.5x -> 1x.
+  const perf = { maxDpr: 2, slow: 0 };
+  function watchSpeed(raw) {
+    if (!(state === 'playing' || state === 'intro') || raw > 0.25 || document.hidden) { perf.slow = 0; return; }   // a pause / tab switch is not lag
+    perf.slow = raw > 0.025 ? perf.slow + raw : Math.max(0, perf.slow - raw);
+    if (perf.slow > 2 && dpr > 1) { perf.maxDpr = dpr > 1.5 ? 1.5 : 1; perf.slow = 0; resize(); }
+  }
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
+    const raw = (now - last) / 1000 || 0, dt = Math.min(0.05, raw); last = now;
+    watchSpeed(raw);
     if (state !== 'idle' && state !== 'paused' && state !== 'dead-paused' && state !== 'edit') update(dt);
     if (state !== 'idle') applyCam(dt);
     // music: plays through the mission card and the fight, holds while paused, stops (and rewinds) on death, a cleared mission, or the menus
@@ -2706,7 +2748,7 @@ const Game = (() => {
       get map() { return map; }, get barrels() { return barrels; }, get level() { return level; }, get stateT() { return stateT; },
       screenOf: (x, y) => ({ x: view.ox + x * view.scale, y: view.oy + y * view.scale }), spill, slow: slowAt, explode, seedMines, simWave, hitTank, freezeAt, homingAim, teleport, get pads() { return pads; }, get ices() { return ices; }, get clock() { return clock; },
       fire: t => fire(t || player), mine: () => layMine(player), visible: tankVisible, onLava, simShot, chooseShot, los, bfs, kill: t => killTank(t || player), tick: dt => update(dt), skipIntro: () => { if (state === 'intro') { state = 'playing'; stateT = 0; } },
-      key: (code, down) => { keys[code] = down; }, aim: a => { player.turret = a; touchMode = true; }, get sticks() { return sticks; }, get consts() { return { TILE, COLS, ROWS, W, H }; },
+      key: (code, down) => { keys[code] = down; }, aim: a => { player.turret = a; touchMode = true; }, get sticks() { return sticks; }, ammoText, get consts() { return { TILE, COLS, ROWS, W, H }; },
     },
   };
 })();
