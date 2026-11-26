@@ -47,10 +47,20 @@ const Sfx = (() => {
 // Music.want() every frame: a track name plays (looping, from the top whenever it starts), 'pause' holds it where it is,
 // null stops it and rewinds. Volume follows Store.opts.music live.
 const Music = (() => {
-  const el = new Audio(); el.loop = true; el.preload = 'auto';
-  let track = null;
+  const el = new Audio(); el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', '');
+  let track = null, unlocked = false, unlocking = false;
+  // iPhones only let music start from a tap: the first tap plays (silently) and stops the player once, after which the
+  // game may start tracks by itself. iPhones also ignore .volume, so the Music slider at 0 mutes it there.
+  function unlock() {
+    if (unlocked) return; unlocked = true;
+    if (!el.src) el.src = 'audio/music/indoor.mp3';
+    el.muted = true; unlocking = true;
+    const p = el.play();
+    const done = () => { if (!track) el.pause(); unlocking = false; el.muted = Store.opts.music <= 0.01; };
+    if (p && p.then) p.then(done, () => { unlocking = false; el.muted = false; unlocked = false; }); else done();
+  }
   function want(name) {
-    el.volume = Math.max(0, Math.min(1, Store.opts.music));
+    el.volume = Math.max(0, Math.min(1, Store.opts.music)); if (!unlocking) el.muted = Store.opts.music <= 0.01;
     if (name === 'pause') { if (!el.paused) el.pause(); return; }
     if (name !== track) {
       el.pause(); track = name;
@@ -59,5 +69,5 @@ const Music = (() => {
     }
     if (name && el.paused) { const p = el.play(); if (p && p.catch) p.catch(() => {}); }
   }
-  return { want, get track() { return track; }, get playing() { return !el.paused; }, _el: el };
+  return { want, unlock, get track() { return track; }, get playing() { return !el.paused; }, _el: el };
 })();

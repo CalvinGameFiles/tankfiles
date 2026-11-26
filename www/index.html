@@ -2,15 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="TankFiles">
 <meta name="theme-color" content="#0b1a2c">
 <title>TankFiles</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="img/icon-192.png">
-<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/icon-180.png">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -296,6 +297,23 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+
+<!-- iPhone: how to put TankFiles on the Home Screen (shown in Safari on an iPhone / iPad, or with ?iphone=1) -->
+<div id="iosInstall" class="ios-sheet hidden">
+  <div class="ios-card">
+    <img src="img/icon-180.png" alt="" class="ios-icon">
+    <h2>Get TankFiles on your iPhone</h2>
+    <ol>
+      <li>This page must be open in <b>Safari</b>.</li>
+      <li>Tap the <b>Share</b> button <span class="ios-share" aria-label="Share"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> (bottom of the screen, or top right when the phone is sideways).</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b> <span class="ios-plus">+</span>, then <b>Add</b>.</li>
+      <li>Open <b>TankFiles</b> from your Home Screen: full screen, no browser bars, and it works without internet.</li>
+    </ol>
+    <div class="ios-btns"><button class="mbtn" id="iosOk">GOT IT</button><button class="sbtn gray" id="iosLater">PLAY IN SAFARI</button></div>
+  </div>
+</div>
+<!-- phones held upright: TankFiles is played sideways -->
+<div id="rotate" class="rotate"><div class="rotate-phone"></div><p>Turn your phone sideways to play</p></div>
 
 <script src="lib/peerjs.min.js"></script>
 <script src="js/store.js"></script>

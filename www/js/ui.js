@@ -202,6 +202,25 @@ const UI = (() => {
       .catch(() => {});
   }
   document.addEventListener('pointerup', goFull, true);
+  // sound on iPhones: unlock it on a real tap (touchend / click count as taps there, pointerdown does not)
+  const unlockAudio = () => { Sfx.unlock(); Music.unlock(); };
+  document.addEventListener('touchend', unlockAudio, true);
+  document.addEventListener('click', unlockAudio, true);
+
+  // ---------- iPhone / iPad ----------
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches);
+  function iosSheet() {
+    const asked = /[?&]iphone=1/.test(location.search);
+    if (window.AndroidApp || standalone) return;                                  // already the home-screen app
+    if (!asked && !(isIOS && !localStorage.getItem('tankfiles.iosSheet'))) return;
+    $('iosInstall').classList.remove('hidden');
+    const close = () => { $('iosInstall').classList.add('hidden'); try { localStorage.setItem('tankfiles.iosSheet', '1'); } catch (e) {} };
+    $('iosOk').addEventListener('click', close); $('iosLater').addEventListener('click', close);
+  }
+  // works offline once opened (not on the PC test server, and the Android app has its own copy)
+  if ('serviceWorker' in navigator && !window.AndroidApp && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  document.addEventListener('DOMContentLoaded', iosSheet);
   document.addEventListener('DOMContentLoaded', init);
   return { page, openSlots, confirm, toast, get deleting() { return deleting; }, get slotMode() { return slotMode; } };
 })();

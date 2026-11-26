@@ -9,6 +9,24 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: b
 .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
   background: radial-gradient(ellipse at 50% 30%, #163a5c 0%, #0b1a2c 75%); z-index: 10; padding: 12px; overflow-y: auto; touch-action: pan-y; }
 .screen.active { display: flex; }
+/* iPhone: Add to Home Screen sheet */
+.ios-sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(5, 12, 22, 0.86); padding: 12px; overflow-y: auto; }
+.ios-sheet.hidden { display: none; }
+.ios-card { width: min(520px, 96vw); background: #14365a; border: 3px solid #f0c25c; border-radius: 16px; padding: 16px 20px; color: #fff3cf; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+.ios-icon { width: 64px; height: 64px; border-radius: 14px; }
+.ios-card h2 { margin: 6px 0 8px; font-size: 22px; }
+.ios-card ol { text-align: left; margin: 0 0 12px; padding-left: 22px; line-height: 1.5; font-size: 16px; }
+.ios-card b { color: #f0c25c; }
+.ios-share { display: inline-flex; vertical-align: middle; color: #3d8bff; background: #fff; border-radius: 6px; padding: 1px 3px; }
+.ios-plus { display: inline-block; width: 20px; height: 20px; line-height: 18px; text-align: center; border: 2px solid #fff3cf; border-radius: 5px; font-weight: bold; }
+.ios-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+/* phone held upright */
+.rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #0b1a2c; color: #fff3cf; font-size: 20px; text-align: center; }
+  .rotate-phone { width: 46px; height: 80px; border: 4px solid #f0c25c; border-radius: 9px; animation: turnPhone 1.8s ease-in-out infinite; }
+}
+@keyframes turnPhone { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
 .screen.overlay { background: rgba(5, 12, 22, 0.78); z-index: 20; backdrop-filter: blur(3px); }
 .screen.overlay.top { z-index: 30; background: rgba(0, 0, 0, 0.6); }
 .screen h2 { font-family: Impact, 'Arial Black', sans-serif; letter-spacing: 3px; font-size: 32px; margin: 6px 0 16px; color: #f2d98a; text-shadow: 2px 2px 0 #000; }
